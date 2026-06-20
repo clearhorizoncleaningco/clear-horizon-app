@@ -203,12 +203,13 @@ export const FREQUENCY_MULTIPLIERS: FrequencyDefault[] = [
 
 // §E.3 + §E.19 — Market tiers (hourly rate + minimum charge).
 // Naples $85/hr is LOCKED by the CLAUDE.md §5 fixture (5.625 prod-hrs * $85 = $478.13).
-// Fort Myers / Luxury Naples hourly rates are PROVISIONAL (not given by §E).
+// Fort Myers ($70) and Luxury Naples ($110) hourly rates were owner-confirmed 2026-06-20
+// (§E gave only their minimums); all three tier rates are now confirmed.
 export const NAPLES_HOURLY_RATE = 85.0;
 export const MARKET_TIERS: MarketTierDefault[] = [
-  { key: "FortMyers", label: "Fort Myers", hourlyRate: 70.0, minimumCharge: 175.0, isProvisional: true },
+  { key: "FortMyers", label: "Fort Myers", hourlyRate: 70.0, minimumCharge: 175.0, isProvisional: false },
   { key: "Naples", label: "Naples", hourlyRate: NAPLES_HOURLY_RATE, minimumCharge: 225.0, isProvisional: false },
-  { key: "LuxuryNaples", label: "Luxury Naples", hourlyRate: 110.0, minimumCharge: 300.0, isProvisional: true },
+  { key: "LuxuryNaples", label: "Luxury Naples", hourlyRate: 110.0, minimumCharge: 300.0, isProvisional: false },
 ];
 
 // §E.3 — Illustrative starter ZIP -> tier mapping (PROVISIONAL; owners refine).

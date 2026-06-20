@@ -83,4 +83,5 @@ A residential quote of **2,200 sq ft / 3 bed / 2.5 bath / biweekly / Naples / av
 - **Prisma 7**: no Rust engine. Connection URL is in `prisma.config.ts` (NOT `schema.prisma`, which holds `provider` only). Client uses a driver adapter (`@prisma/adapter-pg`) in `src/lib/db.ts`, generated into `src/generated/prisma` (gitignored).
 - **Tailwind v4 + Zod v4** in use.
 - Pricing-value source of truth: `src/lib/pricing/defaults.ts` (unit-tested against §E in `defaults.test.ts`).
-- **Provisional values needing owner confirmation** (seeded, Admin-editable, flagged `isProvisional`): Fort Myers hourly rate ($70) and Luxury Naples hourly rate ($110) — only Naples ($85) is pinned by the §5 fixture; the FL tax rate (6% state base); the deep-clean intensity premium (1.5); and the starter ZIP→tier map.
+- **Owner-confirmed rates (2026-06-20):** Fort Myers $70/hr and Luxury Naples $110/hr are locked in (Naples $85 was already pinned by the §5 fixture). All three market-tier rates are final.
+- **Still provisional, Admin-editable (not yet confirmed):** FL tax rate (6% state base), deep-clean intensity premium (1.5), and the starter ZIP→tier map.

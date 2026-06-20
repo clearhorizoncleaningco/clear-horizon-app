@@ -123,18 +123,20 @@ describe("BUILD_SPEC §E — seeded pricing defaults", () => {
     expect(deep.isDeepClean).toBe(true);
   });
 
-  it("§E.3 / §E.19 — market tiers (Naples rate $85 locked; FM/Luxury provisional)", () => {
+  it("§E.3 / §E.19 — market tiers (Naples rate $85 locked; FM/Luxury owner-confirmed)", () => {
     const fm = byKey(MARKET_TIERS, "FortMyers");
+    expect(fm.hourlyRate).toBe(70);
     expect(fm.minimumCharge).toBe(175);
-    expect(fm.isProvisional).toBe(true);
+    expect(fm.isProvisional).toBe(false);
     const naples = byKey(MARKET_TIERS, "Naples");
     expect(naples.hourlyRate).toBe(85);
     expect(naples.hourlyRate).toBe(NAPLES_HOURLY_RATE);
     expect(naples.minimumCharge).toBe(225);
     expect(naples.isProvisional).toBe(false);
     const lux = byKey(MARKET_TIERS, "LuxuryNaples");
+    expect(lux.hourlyRate).toBe(110);
     expect(lux.minimumCharge).toBe(300);
-    expect(lux.isProvisional).toBe(true);
+    expect(lux.isProvisional).toBe(false);
     expect(DEFAULT_MARKET_TIER_KEY).toBe("Naples");
   });
 
