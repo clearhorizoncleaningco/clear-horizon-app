@@ -1,0 +1,381 @@
+// Clear Horizon Cleaning Co. — Prisma schema
+//
+// Architecture rules enforced here (see CLAUDE.md §3 / BUILD_SPEC §D):
+//   - Org-scoped from day one: every business record carries `organizationId`
+//     and is filtered by the current user's org. (No franchise UI in v1.)
+//   - No hardcoded pricing: every rate, multiplier, threshold, fee and rule
+//     lives in these tables, Admin-editable, seeded from BUILD_SPEC §E defaults
+//     (see prisma/seed.ts + src/lib/pricing/defaults.ts).
+//
+// Phase 0 builds the *foundation*: these config tables + auth/org scoping.
+// The pricing ENGINE that consumes them is Phase 1 (do not build it yet).
+
+generator client {
+  // Prisma 7: the `prisma-client` generator emits plain TS into our source tree
+  // (no more "magic" generation into node_modules). Imported from the output path.
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  // Prisma 7: connection URLs are NOT declared here anymore. The CLI reads the
+  // migration URL from prisma.config.ts (DIRECT_URL); the app's PrismaClient
+  // connects via the @prisma/adapter-pg driver adapter using DATABASE_URL
+  // (pooled). See prisma.config.ts and src/lib/db.ts.
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+enum Role {
+  Admin // the owners — full pricing + margin visibility
+  OfficeStaff // create quotes; no margin / pricing-edit access
+  Cleaner // STUBBED in v1 — activated in Phase 3
+}
+
+enum ServiceCategory {
+  Residential
+  Commercial
+}
+
+enum AddOnUnit {
+  Flat // one flat fee regardless of quantity
+  PerUnit // fee multiplied by a quantity (e.g. windows, ceiling fans)
+}
+
+// ----------------------------------------------------------------------------
+// Core: organization + users
+// ----------------------------------------------------------------------------
+
+model Organization {
+  id           String  @id @default(uuid())
+  name         String
+  slug         String  @unique
+  contactEmail String?
+  contactPhone String?
+  website      String?
+
+  // Travel origin may be blank (BUILD_SPEC §E.4). While blank, travel auto-distance
+  // is skipped and the rep picks a bracket / enters miles manually.
+  originAddress String?
+
+  // Default market tier (MarketTier.key) used when a ZIP is unmapped (§E.3).
+  defaultMarketTierKey String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles             Profile[]
+  sqftLaborTiers       SqftLaborTier[]
+  bedroomAdjustments   BedroomAdjustment[]
+  petAdjustments       PetAdjustment[]
+  featureOptions       FeatureOption[]
+  occupancyMultipliers OccupancyMultiplier[]
+  flooringMultipliers  FlooringMultiplier[]
+  conditionMultipliers ConditionMultiplier[]
+  frequencyMultipliers FrequencyMultiplier[]
+  marketTiers          MarketTier[]
+  zipTierMappings      ZipTierMapping[]
+  addOns               AddOn[]
+  travelBrackets       TravelBracket[]
+  taxRates             TaxRate[]
+  serviceTypes         ServiceTypeConfig[]
+  propertyTypes        PropertyType[]
+  pricingSettings      PricingSetting[]
+  marginConfig         MarginConfig?
+}
+
+/// One row per authenticated user, keyed by the Supabase `auth.users.id`.
+/// Supabase Auth owns credentials; this table owns app role + org membership.
+model Profile {
+  id             String       @id @db.Uuid // == auth.users.id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  fullName       String?
+  role           Role         @default(OfficeStaff)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+// ----------------------------------------------------------------------------
+// Pricing config tables — seeded from BUILD_SPEC §E (all Admin-editable)
+// ----------------------------------------------------------------------------
+
+/// §E.1 Step 1 — base labor hours by square footage.
+/// Fixed tiers store [minSqft, maxSqft]. The open-ended tier (maxSqft = null)
+/// also carries the overflow formula params:
+///   hours = baseHours + ((sqft - thresholdSqft) / stepSqft) * stepHours
+model SqftLaborTier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  minSqft        Int
+  maxSqft        Int? // null = open-ended (> thresholdSqft)
+  baseHours      Decimal      @db.Decimal(7, 3)
+  thresholdSqft  Int? // set only on the open-ended tier
+  stepSqft       Int? // set only on the open-ended tier
+  stepHours      Decimal?     @db.Decimal(7, 3) // set only on the open-ended tier
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+/// §E.1 Step 3 — bedroom adjustment hours by bedroom count band.
+model BedroomAdjustment {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  minBeds        Int
+  maxBeds        Int? // null = open-ended (e.g. 6+)
+  hours          Decimal      @db.Decimal(7, 3)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+/// §E.1 Step 4 — pet adjustment hours.
+model PetAdjustment {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String // None | One | TwoPlus | HeavyShedding
+  label          String
+  hours          Decimal      @db.Decimal(7, 3)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.1 Step 5 — additive feature hours (summed).
+model FeatureOption {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String // Stairs | Elevator | HomeOffice | Gym | Theater | Lanai | PoolBath
+  label          String
+  hours          Decimal      @db.Decimal(7, 3)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.1 Step 7 — occupancy multiplier.
+model OccupancyMultiplier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  label          String
+  multiplier     Decimal      @db.Decimal(7, 3)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.1 Step 8 — flooring multiplier.
+model FlooringMultiplier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  label          String
+  multiplier     Decimal      @db.Decimal(7, 3)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.1 Step 9 — condition multiplier.
+model ConditionMultiplier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  label          String
+  multiplier     Decimal      @db.Decimal(7, 3)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.1 Step 13 — frequency multiplier (+ §E.2 visits/month for projected monthly).
+model FrequencyMultiplier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String // Weekly | Biweekly | Monthly | OneTimeStandard | OneTimeDeep
+  label          String
+  multiplier     Decimal      @db.Decimal(7, 3)
+  visitsPerMonth Decimal?     @db.Decimal(7, 3) // null for one-time services
+  isOneTime      Boolean      @default(false)
+  isDeepClean    Boolean      @default(false)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.3 — market tier drives hourly rate + minimum charge.
+model MarketTier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String // FortMyers | Naples | LuxuryNaples
+  label          String
+  hourlyRate     Decimal      @db.Decimal(10, 2)
+  minimumCharge  Decimal      @db.Decimal(10, 2)
+  // BUILD_SPEC §E pins only the Naples rate (derivable as $85 from the fixture).
+  // Fort Myers / Luxury Naples rates are provisional pending owner confirmation.
+  isProvisional  Boolean      @default(false)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.3 — Admin-editable ZIP → tier mapping. Manual tier override exists per
+/// quote, and Organization.defaultMarketTierKey covers unmapped ZIPs.
+model ZipTierMapping {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  zip            String
+  tierKey        String
+  // Starter mapping is illustrative and provisional — owners refine in Admin.
+  isProvisional  Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, zip])
+  @@index([organizationId])
+}
+
+/// §E.1 Step 17 — add-ons (quantity-aware).
+model AddOn {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  label          String
+  price          Decimal         @db.Decimal(10, 2)
+  unit           AddOnUnit       @default(Flat)
+  category       ServiceCategory @default(Residential)
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.1 Step 16 / §E.4 — travel fee brackets by distance.
+model TravelBracket {
+  id                   String       @id @default(uuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  minMiles             Int
+  maxMiles             Int? // null = open-ended (e.g. 30+)
+  fee                  Decimal      @db.Decimal(10, 2)
+  requiresManualReview Boolean      @default(false)
+  sortOrder            Int          @default(0)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+/// §E.5 — tax rate table keyed by jurisdiction.
+model TaxRate {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jurisdiction   String
+  rate           Decimal      @db.Decimal(7, 4) // e.g. 0.0600 = 6%
+  isDefault      Boolean      @default(false)
+  isProvisional  Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, jurisdiction])
+}
+
+/// §E.5 — per service-type taxable flag (residential false, commercial true by default).
+model ServiceTypeConfig {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            ServiceCategory
+  label          String
+  taxable        Boolean
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.7 — property type carries an editable multiplier defaulted to 1.0 (no effect yet).
+model PropertyType {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  label          String
+  multiplier     Decimal      @default(1.000) @db.Decimal(7, 3)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// Scalar pricing knobs that don't warrant their own table
+/// (bathroom rule, intensity reconciliation, rounding, seasonal — §E.1/§E.10/§E.21).
+/// `value` is stored as text; `valueType` drives parsing in the engine (Phase 1).
+model PricingSetting {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  value          String
+  valueType      String // "number" | "string" | "boolean" | "json"
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+/// §E.6 — internal margin settings. ADMIN-ONLY: never rendered to Office Staff,
+/// Cleaners, or customers (enforced in the app layer).
+model MarginConfig {
+  id               String       @id @default(uuid())
+  organizationId   String       @unique
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  laborCostPerHour Decimal      @db.Decimal(10, 2) // seed $22 (blended cost per crew-hour)
+  suppliesPerVisit Decimal      @db.Decimal(10, 2) // seed $10
+  targetLaborPct   Decimal      @db.Decimal(6, 4) // seed 0.5000 (50%)
+  laborBandMin     Decimal      @db.Decimal(6, 4) // seed 0.4000 (40%)
+  laborBandMax     Decimal      @db.Decimal(6, 4) // seed 0.6000 (60%)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}

@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* next-themes uses a `.dark` class on <html>; make `dark:` utilities follow it. */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Clear Horizon Cleaning Co. brand palette (BUILD_SPEC §C):
+ *   #0D2B45 navy · #1E6FB8 brand blue · #7CC4F2 light blue
+ *   #FDB813 sun gold · #F1F3F6 light gray
+ */
+:root {
+  --background: #f1f3f6;
+  --foreground: #0d2b45;
+  --card: #ffffff;
+  --card-foreground: #0d2b45;
+  --popover: #ffffff;
+  --popover-foreground: #0d2b45;
+  --primary: #1e6fb8;
+  --primary-foreground: #ffffff;
+  --secondary: #7cc4f2;
+  --secondary-foreground: #0d2b45;
+  --muted: #e6ebf1;
+  --muted-foreground: #5b6b7b;
+  --accent: #7cc4f2;
+  --accent-foreground: #0d2b45;
+  --border: #d4dce5;
+  --input: #d4dce5;
+  --ring: #1e6fb8;
+  --brand-navy: #0d2b45;
+  --brand-blue: #1e6fb8;
+  --brand-lightblue: #7cc4f2;
+  --brand-gold: #fdb813;
+  --brand-gray: #f1f3f6;
+}
+
+.dark {
+  --background: #0d2b45;
+  --foreground: #f1f3f6;
+  --card: #11324f;
+  --card-foreground: #f1f3f6;
+  --popover: #11324f;
+  --popover-foreground: #f1f3f6;
+  --primary: #1e6fb8;
+  --primary-foreground: #ffffff;
+  --secondary: #1c476b;
+  --secondary-foreground: #cfe6fa;
+  --muted: #163a59;
+  --muted-foreground: #9db2c6;
+  --accent: #7cc4f2;
+  --accent-foreground: #0d2b45;
+  --border: #24496b;
+  --input: #24496b;
+  --ring: #7cc4f2;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-lightblue: var(--brand-lightblue);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gray: var(--brand-gray);
+  --font-sans: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}
