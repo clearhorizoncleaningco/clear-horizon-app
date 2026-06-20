@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireProfile } from "@/lib/auth/dal";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -25,6 +27,7 @@ export default async function DashboardPage() {
   }
 
   const firstName = profile.fullName?.split(" ")[0] ?? "there";
+  const isAdmin = profile.role === "Admin";
 
   return (
     <div className="flex flex-col gap-8">
@@ -33,6 +36,41 @@ export default async function DashboardPage() {
         <p className="text-muted-foreground">
           {profile.organization.name} · estimating platform
         </p>
+      </div>
+
+      {/* Quick actions — the Phase 1 estimator */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="border-primary/40">
+          <CardHeader>
+            <CardTitle>New residential estimate</CardTitle>
+            <CardDescription>Guided wizard with a live running price.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/estimate/new" className={buttonVariants()}>Start estimate →</Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>New commercial quote</CardTitle>
+            <CardDescription>Manual walk-through price + line items.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/commercial/new" className={buttonVariants({ variant: "outline" })}>Start commercial →</Link>
+          </CardContent>
+        </Card>
+
+        {isAdmin ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Pricing settings</CardTitle>
+              <CardDescription>Edit any rate, multiplier, fee or rule.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/admin/pricing" className={buttonVariants({ variant: "outline" })}>Open settings →</Link>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       {/* Placeholder metric cards — populated by the estimator in Phase 1. */}

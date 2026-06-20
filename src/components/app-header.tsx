@@ -21,10 +21,25 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-        <Link href="/dashboard" className="flex items-center" aria-label="Clear Horizon — Dashboard">
-          {/* Brand horizontal logo (wired by filename per BUILD_SPEC §C). */}
-          <Image src={logo} alt="Clear Horizon Cleaning Co." className="h-9 w-auto" priority />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard" className="flex items-center" aria-label="Clear Horizon — Dashboard">
+            {/* Brand horizontal logo (wired by filename per BUILD_SPEC §C). */}
+            <Image src={logo} alt="Clear Horizon Cleaning Co." className="h-9 w-auto" priority />
+          </Link>
+          <nav className="ml-2 hidden items-center gap-1 md:flex">
+            <Link href="/estimate/new" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+              New estimate
+            </Link>
+            <Link href="/commercial/new" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+              Commercial
+            </Link>
+            {role === "Admin" ? (
+              <Link href="/admin/pricing" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+                Pricing
+              </Link>
+            ) : null}
+          </nav>
+        </div>
 
         <div className="flex items-center gap-3">
           {role ? (
