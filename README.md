@@ -63,16 +63,13 @@ npm run dev         # http://localhost:3000
 Create the tables and seed:
 
 ```bash
-npm run db:deploy   # apply migrations to Supabase  (see note below for first run)
+npm run db:deploy   # applies the baseline migration (prisma/migrations/0_init)
 npm run db:seed     # create Organization + Admin user + all §E pricing tables
 ```
 
-> **First migration:** this repo ships without a migration yet (Phase 0 schema only).
-> Generate the initial migration once your `DIRECT_URL` is set:
-> ```bash
-> npx prisma migrate dev --name init
-> ```
-> On subsequent environments use `npm run db:deploy`.
+> A baseline migration (`prisma/migrations/0_init`) ships in the repo, so
+> `db:deploy` works against a fresh Supabase database with no extra steps. In
+> later phases, evolve the schema with `npx prisma migrate dev --name <change>`.
 
 Then sign in at <http://localhost:3000/login> with your seeded admin email + password.
 You should land on a themed dashboard showing your organization, email, and the **Admin** role.

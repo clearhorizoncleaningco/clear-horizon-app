@@ -72,8 +72,8 @@ A residential quote of **2,200 sq ft / 3 bed / 2.5 bath / biweekly / Naples / av
 - Typecheck: `npm run typecheck`  *(`tsc --noEmit`, strict)*
 - Lint: `npm run lint`  *(`eslint`)*
 - Production build: `npm run build`
-- DB — create/apply migration (dev): `npx prisma migrate dev --name <name>`  *(first run: `--name init`)*
-- DB — apply migrations (prod): `npm run db:deploy`
+- DB — apply migrations (incl. baseline `0_init`): `npm run db:deploy`
+- DB — evolve schema later (dev): `npx prisma migrate dev --name <change>`
 - DB — seed Org + Admin + §E pricing tables: `npm run db:seed`
 - DB — Prisma Studio: `npm run db:studio`
 - Deploy: push to GitHub → import in Vercel → set env vars (see `README.md` §3) → Vercel runs `postinstall` + `next build`. Run `db:deploy` + `db:seed` against Supabase separately.
