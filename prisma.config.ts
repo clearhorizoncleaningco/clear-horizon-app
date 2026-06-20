@@ -28,6 +28,8 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // Prisma 7: the seed command lives here now (NOT in package.json's `prisma` key).
+    seed: "tsx prisma/seed.ts",
   },
   datasource: {
     url: migrationUrl,
