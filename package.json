@@ -13,11 +13,15 @@
     "test:watch": "vitest",
     "verify:pdf": "vitest run src/lib/proposals/pdf.render.test.ts",
     "verify:ghl": "vitest run src/lib/ghl/client.test.ts",
+    "verify:report": "vitest run src/lib/jobs/report.render.test.ts",
+    "verify:phase3": "vitest run src/lib/dashboard/verify-phase3.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "db:seed:sample": "tsx prisma/seed-sample.ts",
+    "setup:storage": "tsx scripts/setup-storage.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

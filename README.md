@@ -2,12 +2,17 @@
 
 Internal estimating & proposal tool. **Clean Spaces. Better Places.**
 
-> Status: **Phase 2 (Save & Propose + GHL handoff) complete.** On top of the Phase 1
-> estimator: customer records + search + duplicate detection, saved/retrievable
-> estimates, branded PDF proposals (residential + commercial FL T&C, scope-of-work
-> checklists), lightweight e-approval (I-agree + typed name + timestamp + IP) with a
-> 30-day expiration, and a one-way GoHighLevel push **behind a feature flag, stubbed
-> off** until credentials are added.
+> Status: **Phase 3 (Light operations & the data loop) complete.** On top of the
+> Phase 1 estimator + Phase 2 save/propose: a dashboard with KPIs, charts and an
+> activity feed; reports with CSV export; the in-app **calibration loop** (log
+> actual crew hours, labor $ and price charged per job → realised margin vs. the
+> 50% target); a minimal **Cleaner view** (assigned jobs, mark progress, upload
+> before/after photos) feeding a public **customer photo report**; a cleaner
+> earnings view; and **audit logs** on every pricing change.
+>
+> _Phase 2 recap:_ customer records + dedupe, saved estimates, branded PDF proposals
+> (FL T&C + scope checklists), e-approval with 30-day expiry, and a one-way
+> GoHighLevel push **behind a feature flag, stubbed off** until credentials are added.
 
 ## Stack
 
@@ -70,14 +75,26 @@ npm run db:deploy   # applies the baseline migration (prisma/migrations/0_init)
 npm run db:seed     # create Organization + Admin user + all §E pricing tables
 ```
 
-> Migrations ship in the repo (`prisma/migrations/0_init` + the Phase 2
-> `…_phase2_save_propose_ghl`), so `db:deploy` brings a fresh Supabase database
-> fully up to date with no extra steps. Phase 2 added no new seed data — customer,
-> estimate, and proposal rows are created in-app. Evolve the schema later with
+> Migrations ship in the repo (`0_init` + `…_phase2_save_propose_ghl` +
+> `…_phase3_jobs_calibration_audit`), so `db:deploy` brings a fresh Supabase
+> database fully up to date with no extra steps. Evolve the schema later with
 > `npx prisma migrate dev --name <change>`.
 
 Then sign in at <http://localhost:3000/login> with your seeded admin email + password.
 You should land on a themed dashboard showing your organization, email, and the **Admin** role.
+
+### Phase 3 — photo uploads + sample data (optional)
+
+```bash
+npm run setup:storage    # one-time: create the public "job-photos" Storage bucket
+npm run db:seed:sample   # demo Cleaner + sample estimates/jobs/photos (clearly tagged)
+```
+
+After the sample seed, the dashboard/reports/calibration show live data, a demo
+**customer photo report** is published (its link is printed by the seed), and you
+can sign in as the seeded **Cleaner** to mark jobs done and upload before/after
+photos. Cleaner before/after uploads require the storage bucket above. Delete the
+demo rows in Prisma Studio once you start logging real jobs.
 
 ---
 
@@ -112,10 +129,14 @@ You should land on a themed dashboard showing your organization, email, and the 
 | Unit tests | `npm test` |
 | Verify branded PDF (writes `tmp/sample-proposal.pdf`) | `npm run verify:pdf` |
 | Verify stubbed GHL payload | `npm run verify:ghl` |
+| Verify customer photo report (writes `tmp/sample-report.html`) | `npm run verify:report` |
+| Verify Phase 3 dashboard (writes `tmp/sample-dashboard.html` + CSVs) | `npm run verify:phase3` |
 | Generate Prisma client | `npm run db:generate` |
 | Create/apply migration (dev) | `npm run db:migrate` |
 | Apply migrations (prod) | `npm run db:deploy` |
-| Seed data | `npm run db:seed` |
+| Seed Org + Admin + pricing | `npm run db:seed` |
+| Seed Phase 3 sample data (demo) | `npm run db:seed:sample` |
+| Create the `job-photos` storage bucket | `npm run setup:storage` |
 | Prisma Studio | `npm run db:studio` |
 
 ## Architecture guardrails (see `CLAUDE.md` + `docs/BUILD_SPEC.md`)

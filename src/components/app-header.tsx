@@ -11,6 +11,29 @@ const ROLE_LABELS: Record<Role, string> = {
   Cleaner: "Cleaner",
 };
 
+/** Role-aware nav: cleaners get a focused view; staff/admins get the full set. */
+function navLinks(role?: Role | null): { href: string; label: string }[] {
+  if (role === "Cleaner") {
+    return [
+      { href: "/cleaner", label: "My jobs" },
+      { href: "/cleaner/earnings", label: "Earnings" },
+    ];
+  }
+  const links = [
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/estimate/new", label: "New estimate" },
+    { href: "/estimates", label: "Estimates" },
+    { href: "/customers", label: "Customers" },
+    { href: "/jobs", label: "Jobs" },
+    { href: "/reports", label: "Reports" },
+  ];
+  if (role === "Admin") {
+    links.push({ href: "/calibration", label: "Calibration" });
+    links.push({ href: "/admin/pricing", label: "Pricing" });
+  }
+  return links;
+}
+
 export function AppHeader({
   email,
   role,
@@ -18,32 +41,26 @@ export function AppHeader({
   email?: string | null;
   role?: Role | null;
 }) {
+  const links = navLinks(role);
+  const home = role === "Cleaner" ? "/cleaner" : "/dashboard";
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
         <div className="flex items-center gap-2">
-          <Link href="/dashboard" className="flex items-center" aria-label="Clear Horizon — Dashboard">
+          <Link href={home} className="flex items-center" aria-label="Clear Horizon — Home">
             {/* Brand horizontal logo (wired by filename per BUILD_SPEC §C). */}
             <Image src={logo} alt="Clear Horizon Cleaning Co." className="h-9 w-auto" priority />
           </Link>
           <nav className="ml-2 hidden items-center gap-1 md:flex">
-            <Link href="/estimate/new" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-              New estimate
-            </Link>
-            <Link href="/commercial/new" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-              Commercial
-            </Link>
-            <Link href="/estimates" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-              Estimates
-            </Link>
-            <Link href="/customers" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-              Customers
-            </Link>
-            {role === "Admin" ? (
-              <Link href="/admin/pricing" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-                Pricing
+            {links.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {l.label}
               </Link>
-            ) : null}
+            ))}
           </nav>
         </div>
 

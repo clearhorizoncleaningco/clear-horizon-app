@@ -76,8 +76,12 @@ A residential quote of **2,200 sq ft / 3 bed / 2.5 bath / biweekly / Naples / av
 - DB — evolve schema later (dev): `npx prisma migrate dev --name <change>`
 - DB — seed Org + Admin + §E pricing tables: `npm run db:seed`  *(Phase 2 added no seed data — customers/estimates/proposals are created in-app)*
 - DB — Prisma Studio: `npm run db:studio`
+- DB — seed Phase 3 demo data (Cleaner + sample estimates/jobs/photos): `npm run db:seed:sample`
+- Storage — create the public `job-photos` bucket (one-time): `npm run setup:storage`
 - Verify branded PDF (writes `tmp/sample-proposal.pdf`): `npm run verify:pdf`
 - Verify stubbed GHL payload: `npm run verify:ghl`
+- Verify customer photo report (writes `tmp/sample-report.html`): `npm run verify:report`
+- Verify Phase 3 dashboard from sample jobs (writes `tmp/sample-dashboard.html` + report CSVs): `npm run verify:phase3`
 - Deploy: push to GitHub → import in Vercel → set env vars (see `README.md` §3, incl. `GHL_PUSH_ENABLED`/`GHL_WEBHOOK_URL`) → Vercel runs `postinstall` + `next build`. Run `db:deploy` + `db:seed` against Supabase separately.
 
 ### Stack notes for future sessions (verified Phase 0)
@@ -97,3 +101,14 @@ A residential quote of **2,200 sq ft / 3 bed / 2.5 bath / biweekly / Naples / av
 - **GHL push:** one-way, behind `GHL_PUSH_ENABLED` (default false) — STUBBED. `src/lib/ghl/client.ts` returns `{status:"stubbed", wouldSend}` with NO network call until the flag is on AND `GHL_WEBHOOK_URL` is set.
 - **Vitest aliases:** `vitest.config.ts` now resolves `@/*` and stubs `server-only` (→ `empty.js`) so server modules are testable under node resolution.
 - **T&C term values — OWNER-CONFIRMED 2026-06-21** (`src/lib/proposals/terms.ts` → `DEFAULT_TERMS_CONFIG`): Net 15 commercial terms, 1.5%/mo late fee, **3% annual increase (fixed by §G)**, liability cap = prior 3 months' fees, 24-mo non-solicit, 48-hr cancellation notice, six observed holidays, Collier County/Naples venue. Values are final; the *prose* still warrants a counsel review. Contract terms, not DB pricing.
+
+### Phase 3 notes (verified 2026-06-21)
+- **Models added:** `Job`, `JobPhoto`, `AuditLog` (+ enums `JobStatus`/`JobPhotoKind`), all org-scoped. Migration `prisma/migrations/20260621120000_phase3_jobs_calibration_audit` (generated offline via `prisma migrate diff --from-schema … --to-schema …` — the Prisma 7 flag is `--from-schema`/`--to-schema`, NOT `--from-schema-datamodel`). `Job` holds BOTH operational tracking (assignment, status, before/after photos) and the calibration actuals; `Job.assignedToId` FKs `Profile` (the one business→auth FK, needed for the cleaner/earnings queries).
+- **Pure-logic discipline (mirrors the pricing engine):** ALL aggregation/calibration/report/earnings math is in pure modules over plain row arrays — `src/lib/{dashboard,reports,calibration,jobs,audit}/*.ts` — unit-tested with NO DB. Services (`*/service.ts`, `server-only`) fetch org-scoped rows, map Prisma `Decimal`→`number` at the boundary, and call the pure fns. 49 new tests; 186 total.
+- **Margin firewall (CLAUDE.md §3.5):** the customer photo report renders a margin-free `PhotoReportDocument` (`src/lib/jobs/report.ts`, like Phase 2's `ProposalDocument`) — no price/cost/labor/margin by construction (enforced by `report.test.ts` + `report.render.test.ts`). Calibration + the per-job margin panel are **Admin-only** (gated in actions + pages).
+- **Calibration:** `computeJobCalibration` surfaces realised labor % / margin vs. the §E.6 50% target (band 40–60%): "under" band = margin rich, "over" = thin. Seeded engine pricing runs ~25–34% labor → flagged "rich"/below-band (expected, internally consistent with `MarginResult.outOfBand`).
+- **CSV/Excel export:** CSV with a UTF-8 BOM (`src/lib/reports/csv.ts`) served from `GET /api/reports/export?type=…` (auth-gated via DAL since `/api` is outside the proxy matcher). Chose CSV over a true `.xlsx` binary deliberately — Excel/Sheets/Numbers open it natively, zero deps, no security surface (same "lightest credible path" reasoning as @react-pdf in Phase 2).
+- **Photos:** Supabase Storage public bucket `job-photos` (`src/lib/jobs/storage.ts` + `src/lib/supabase/admin.ts`, service-role, server-only). `storagePath` with a leading `/` = a local `/public` asset (demo seed photos reuse brand PNGs) so the report renders without any cloud setup. Uploads via a multipart server action (`uploadJobPhotoAction`); cleaners can only act on jobs assigned to them.
+- **Roles/nav:** Cleaner lands on `/cleaner` (dashboard redirects them); header nav is role-aware. Public photo report at `/report/[token]` (added to `proxy.ts` PUBLIC_PATHS, like `/approve`).
+- **Audit:** every Admin pricing action reads old values, updates, then writes one `AuditLog` row per changed field (`src/lib/audit/diff.ts` is pure + tested; `…/service.ts` persists). Viewed at `/admin/audit`.
+- **Convert to Job:** estimate detail page → `createJobFromEstimate` (idempotent: returns the existing active job rather than duplicating).

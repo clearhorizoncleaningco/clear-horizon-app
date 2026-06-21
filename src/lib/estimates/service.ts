@@ -125,6 +125,7 @@ export async function getEstimate(organizationId: string, id: string) {
     include: {
       customer: true,
       proposals: { orderBy: { createdAt: "desc" } },
+      jobs: { orderBy: { createdAt: "desc" }, select: { id: true, status: true } },
     },
   });
 }

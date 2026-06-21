@@ -118,6 +118,11 @@ model Organization {
   customers Customer[]
   estimates Estimate[]
   proposals Proposal[]
+
+  // Phase 3
+  jobs      Job[]
+  jobPhotos JobPhoto[]
+  auditLogs AuditLog[]
 }
 
 /// One row per authenticated user, keyed by the Supabase `auth.users.id`.
@@ -131,6 +136,9 @@ model Profile {
   role           Role         @default(OfficeStaff)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  // Phase 3 — jobs assigned to this user (Cleaner view + earnings).
+  assignedJobs Job[] @relation("AssignedJobs")
 
   @@index([organizationId])
 }
@@ -438,6 +446,7 @@ model Customer {
   updatedAt       DateTime        @updatedAt
 
   estimates Estimate[]
+  jobs      Job[]
 
   @@index([organizationId])
   @@index([organizationId, email])
@@ -481,6 +490,7 @@ model Estimate {
   updatedAt DateTime @updatedAt
 
   proposals Proposal[]
+  jobs      Job[]
 
   @@index([organizationId])
   @@index([organizationId, createdAt])
@@ -527,4 +537,138 @@ model Proposal {
 
   @@index([organizationId])
   @@index([estimateId])
+}
+
+// ----------------------------------------------------------------------------
+// Phase 3 — light operations + the data loop (BUILD_SPEC §G Phase 3).
+// Jobs (created from estimates) carry operational tracking AND the calibration
+// actuals the engine learns from; before/after photos feed a customer report;
+// audit logs record Admin pricing changes. All org-scoped.
+// ----------------------------------------------------------------------------
+
+enum JobStatus {
+  Scheduled // created / assigned, not yet started
+  InProgress // cleaner marked started
+  Completed // cleaner marked done
+  Cancelled
+}
+
+enum JobPhotoKind {
+  Before
+  After
+}
+
+/// A real, logged job — the unit the calibration loop learns from (§E intro,
+/// §G Phase 3). Created from an Estimate ("Convert to Job"). Holds the
+/// operational tracking (assignment, status, before/after photos) AND the
+/// calibration actuals (crew hours, labor $, price charged) so estimated-vs-
+/// actual margin can be compared to the 50% target.
+///
+/// Money/cost/margin fields are ADMIN-ONLY (enforced in the app layer); the
+/// customer photo report is built from a margin-free projection (see
+/// src/lib/jobs/report.ts), so it cannot leak internal economics.
+model Job {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  estimateId     String?
+  estimate       Estimate?       @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  customerId     String?
+  customer       Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  category       ServiceCategory @default(Residential)
+  status         JobStatus       @default(Scheduled)
+
+  // Snapshot for the cleaner + the customer report (independent of later edits).
+  summary      String?
+  customerName String?
+  address      String?
+  city         String?
+  zip          String?
+  scheduledFor DateTime?
+
+  // Assignment to a Cleaner/Admin Profile (SetNull if that profile is removed).
+  assignedToId    String?  @db.Uuid
+  assignedTo      Profile? @relation("AssignedJobs", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToName  String?
+  assignedToEmail String?
+
+  // Estimated economics (snapshot from the estimate at conversion) — ADMIN-ONLY.
+  quotedPrice        Decimal  @db.Decimal(10, 2)
+  estProductionHours Decimal? @db.Decimal(7, 3)
+  estLaborCost       Decimal? @db.Decimal(10, 2)
+
+  // Calibration actuals (logged after the job runs) — ADMIN-ONLY.
+  priceCharged       Decimal?  @db.Decimal(10, 2)
+  actualCrewHours    Decimal?  @db.Decimal(7, 3)
+  actualLaborCost    Decimal?  @db.Decimal(10, 2)
+  actualSuppliesCost Decimal?  @db.Decimal(10, 2)
+  calibrationNotes   String?
+  calibratedAt       DateTime?
+
+  // Earnings paid to the assigned cleaner for this job (cleaner earnings view).
+  cleanerPayAmount Decimal? @db.Decimal(10, 2)
+
+  // Public customer photo report (token-gated, no auth — mirrors Proposal.token).
+  reportToken     String  @unique @default(uuid())
+  reportPublished Boolean @default(false)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdById    String?
+  createdByEmail String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  photos JobPhoto[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, completedAt])
+  @@index([assignedToId])
+  @@index([estimateId])
+  @@index([customerId])
+}
+
+/// A before/after photo on a Job, surfaced in the customer report. `storagePath`
+/// is a key in the Supabase Storage `job-photos` bucket; a leading "/" means a
+/// local /public asset (used by demo seed data). No internal economics here.
+model JobPhoto {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobId           String
+  job             Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind            JobPhotoKind
+  storagePath     String
+  caption         String?
+  room            String?
+  sortOrder       Int          @default(0)
+  uploadedById    String?
+  uploadedByEmail String?
+  createdAt       DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([jobId])
+}
+
+/// Append-only audit trail for Admin pricing changes (§G Phase 3). One row per
+/// changed field, so a tier rate edit from $85 → $90 is a single, queryable row.
+model AuditLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String?
+  actorEmail     String?
+  category       String // e.g. "Pricing"
+  entity         String // e.g. "MarketTier", "MarginConfig"
+  entityLabel    String? // human label, e.g. "Naples"
+  field          String?
+  action         String // "update" | "create" | "delete"
+  oldValue       String?
+  newValue       String?
+  summary        String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
 }

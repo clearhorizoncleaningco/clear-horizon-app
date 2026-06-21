@@ -8,6 +8,7 @@ import { QuoteResults } from "@/components/estimate/quote-results";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { generateProposalAction, pushToGhlAction } from "../actions";
+import { convertEstimateToJobAction } from "../../jobs/actions";
 
 export const metadata: Metadata = { title: "Estimate" };
 
@@ -73,6 +74,26 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
 
       {/* Proposals */}
       <ProposalsSection estimate={estimate} siteUrl={siteUrl} />
+
+      {/* Operations — convert to a trackable job (Phase 3) */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base">Job</CardTitle>
+            <CardDescription>Convert this quote into a trackable job — assign a cleaner, capture before/after photos, log actuals.</CardDescription>
+          </div>
+          {estimate.jobs.length > 0 ? (
+            <Link href={`/jobs/${estimate.jobs[0].id}`} className={buttonVariants({ variant: "outline" })}>
+              Open job ({estimate.jobs[0].status}) →
+            </Link>
+          ) : (
+            <form action={convertEstimateToJobAction}>
+              <input type="hidden" name="estimateId" value={estimate.id} />
+              <Button type="submit">Convert to job</Button>
+            </form>
+          )}
+        </CardHeader>
+      </Card>
     </div>
   );
 }
