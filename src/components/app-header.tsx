@@ -33,6 +33,12 @@ export function AppHeader({
             <Link href="/commercial/new" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
               Commercial
             </Link>
+            <Link href="/estimates" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+              Estimates
+            </Link>
+            <Link href="/customers" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+              Customers
+            </Link>
             {role === "Admin" ? (
               <Link href="/admin/pricing" className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
                 Pricing

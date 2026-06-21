@@ -72,11 +72,13 @@ A residential quote of **2,200 sq ft / 3 bed / 2.5 bath / biweekly / Naples / av
 - Typecheck: `npm run typecheck`  *(`tsc --noEmit`, strict)*
 - Lint: `npm run lint`  *(`eslint`)*
 - Production build: `npm run build`
-- DB — apply migrations (incl. baseline `0_init`): `npm run db:deploy`
+- DB — apply migrations (incl. baseline `0_init` + Phase 2 `20260620120000_phase2_save_propose_ghl`): `npm run db:deploy`
 - DB — evolve schema later (dev): `npx prisma migrate dev --name <change>`
-- DB — seed Org + Admin + §E pricing tables: `npm run db:seed`
+- DB — seed Org + Admin + §E pricing tables: `npm run db:seed`  *(Phase 2 added no seed data — customers/estimates/proposals are created in-app)*
 - DB — Prisma Studio: `npm run db:studio`
-- Deploy: push to GitHub → import in Vercel → set env vars (see `README.md` §3) → Vercel runs `postinstall` + `next build`. Run `db:deploy` + `db:seed` against Supabase separately.
+- Verify branded PDF (writes `tmp/sample-proposal.pdf`): `npm run verify:pdf`
+- Verify stubbed GHL payload: `npm run verify:ghl`
+- Deploy: push to GitHub → import in Vercel → set env vars (see `README.md` §3, incl. `GHL_PUSH_ENABLED`/`GHL_WEBHOOK_URL`) → Vercel runs `postinstall` + `next build`. Run `db:deploy` + `db:seed` against Supabase separately.
 
 ### Stack notes for future sessions (verified Phase 0)
 - **Next.js 16**: route protection is `src/proxy.ts` (NOT `middleware.ts`); `cookies()` is async.
@@ -85,3 +87,13 @@ A residential quote of **2,200 sq ft / 3 bed / 2.5 bath / biweekly / Naples / av
 - Pricing-value source of truth: `src/lib/pricing/defaults.ts` (unit-tested against §E in `defaults.test.ts`).
 - **Owner-confirmed rates (2026-06-20):** Fort Myers $70/hr and Luxury Naples $110/hr are locked in (Naples $85 was already pinned by the §5 fixture). All three market-tier rates are final.
 - **Still provisional, Admin-editable (not yet confirmed):** FL tax rate (6% state base), deep-clean intensity premium (1.5), and the starter ZIP→tier map.
+
+### Phase 2 notes (verified 2026-06-21)
+- **Models added:** `Customer`, `Estimate`, `Proposal` (+ enums `EstimateStatus`/`ProposalStatus`/`GhlPushStatus`), all org-scoped. Migration `prisma/migrations/20260620120000_phase2_save_propose_ghl` (DDL extracted from `prisma migrate diff`; apply with `db:deploy`).
+- **PDF engine: `@react-pdf/renderer`** (chosen over Playwright per §D — pure-Node, no headless Chromium, Vercel-friendly). Renderer `src/lib/proposals/pdf.tsx`; public route `GET /api/proposals/[token]/pdf`. Logo embedded via `node:fs` + `next.config.ts` `outputFileTracingIncludes` (primary stacked logo `01_primary_logo_2.png`). Body font is built-in Helvetica (Montserrat TTF embedding is a later nicety).
+- **Margin firewall:** customer-facing surfaces render a `ProposalDocument` (`src/lib/proposals/types.ts`) that has NO margin fields by construction; enforced by `document.test.ts`.
+- **Saved quotes are immutable:** `Estimate.inputJson` + `resultJson` snapshot the engine I/O; the engine is re-run SERVER-SIDE on save (never trust client math). `Proposal.documentJson` freezes the rendered doc.
+- **E-approval:** public page `src/app/approve/[token]` (token-gated, added to `proxy.ts` PUBLIC_PATHS). Captures "I agree" + typed name + timestamp + IP (`x-forwarded-for`). 30-day expiry via `computeExpiry`.
+- **GHL push:** one-way, behind `GHL_PUSH_ENABLED` (default false) — STUBBED. `src/lib/ghl/client.ts` returns `{status:"stubbed", wouldSend}` with NO network call until the flag is on AND `GHL_WEBHOOK_URL` is set.
+- **Vitest aliases:** `vitest.config.ts` now resolves `@/*` and stubs `server-only` (→ `empty.js`) so server modules are testable under node resolution.
+- **T&C term values — OWNER-CONFIRMED 2026-06-21** (`src/lib/proposals/terms.ts` → `DEFAULT_TERMS_CONFIG`): Net 15 commercial terms, 1.5%/mo late fee, **3% annual increase (fixed by §G)**, liability cap = prior 3 months' fees, 24-mo non-solicit, 48-hr cancellation notice, six observed holidays, Collier County/Naples venue. Values are final; the *prose* still warrants a counsel review. Contract terms, not DB pricing.

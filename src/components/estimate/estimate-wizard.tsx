@@ -7,6 +7,8 @@ import {
   type ResidentialQuoteInput,
 } from "@/lib/pricing";
 import { currency, currency0 } from "@/lib/format";
+import { findDuplicatesAction, saveResidentialEstimateAction } from "@/app/(app)/estimate/actions";
+import type { DuplicateCandidate } from "@/lib/customers/dedupe";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -102,6 +104,31 @@ export function EstimateWizard({
     setForm((prev) => ({ ...prev, addOnQty: { ...prev.addOnQty, [key]: Math.max(0, qty) } }));
   }
 
+  // Phase 2 — customer linking, duplicate detection (§F), and save state.
+  const [linkedCustomerId, setLinkedCustomerId] = React.useState<string | null>(null);
+  const [duplicates, setDuplicates] = React.useState<DuplicateCandidate[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  function linkCustomer(candidate: DuplicateCandidate) {
+    const c = candidate.customer;
+    setLinkedCustomerId(c.id);
+    setForm((prev) => ({
+      ...prev,
+      customerName: c.name ?? prev.customerName,
+      email: c.email ?? prev.email,
+      phone: c.phone ?? prev.phone,
+      address: c.address ?? prev.address,
+      city: c.city ?? prev.city,
+      zip: c.zip ?? prev.zip,
+    }));
+    setDuplicates([]);
+  }
+
+  function unlinkCustomer() {
+    setLinkedCustomerId(null);
+  }
+
   const input: ResidentialQuoteInput = React.useMemo(
     () => ({
       sqft: form.sqft,
@@ -134,6 +161,64 @@ export function EstimateWizard({
 
   const headline = result ? currency0(result.primary.preTaxPrice) : "—";
 
+  // Live, debounced duplicate detection for the customer step (§F). All state
+  // updates happen inside the (async) timeout/promise — never synchronously in
+  // the effect body — to avoid cascading renders.
+  const { customerName, email, phone, address, zip } = form;
+  React.useEffect(() => {
+    let active = true;
+    const handle = setTimeout(() => {
+      const hasIdentity = customerName.trim() || email.trim() || phone.trim();
+      if (linkedCustomerId || !hasIdentity) {
+        if (active) setDuplicates([]);
+        return;
+      }
+      findDuplicatesAction({ name: customerName, email, phone, address, zip })
+        .then((d) => active && setDuplicates(d))
+        .catch(() => active && setDuplicates([]));
+    }, 400);
+    return () => {
+      active = false;
+      clearTimeout(handle);
+    };
+  }, [customerName, email, phone, address, zip, linkedCustomerId]);
+
+  async function handleSave() {
+    if (!result) return;
+    setSaving(true);
+    setSaveError(null);
+    const res = await saveResidentialEstimateAction({
+      sqft: form.sqft,
+      bedrooms: form.bedrooms,
+      bathrooms: form.bathrooms,
+      zip: form.zip || null,
+      marketTierKeyOverride: form.tierOverride || null,
+      propertyTypeKey: form.propertyTypeKey || null,
+      occupancyKey: form.occupancyKey,
+      flooringKey: form.flooringKey,
+      conditionKey: form.conditionKey,
+      petKey: form.petKey,
+      featureKeys: form.featureKeys,
+      frequencyKey: form.frequencyKey,
+      travelMiles: form.travelMiles,
+      addOns: Object.entries(form.addOnQty).map(([key, quantity]) => ({ key, quantity })),
+      seasonalOverride: form.seasonalOverride || null,
+      customer: {
+        customerId: linkedCustomerId,
+        name: form.customerName || null,
+        email: form.email || null,
+        phone: form.phone || null,
+        address: form.address || null,
+        city: form.city || null,
+        zip: form.zip || null,
+        notes: form.notes || null,
+      },
+    });
+    // Success redirects server-side; a returned value means it failed.
+    setSaveError(res.error);
+    setSaving(false);
+  }
+
   // --- Step bodies -----------------------------------------------------------
 
   function renderCustomer() {
@@ -160,9 +245,43 @@ export function EstimateWizard({
         <Field label="Notes" full>
           <Textarea value={form.notes} onChange={(e) => setField("notes", e.target.value)} placeholder="Gate code, parking, special requests…" />
         </Field>
-        <p className="sm:col-span-2 text-xs text-muted-foreground">
-          Customer records, search &amp; duplicate detection arrive in Phase 2. For now this info rides along with the quote.
-        </p>
+        <div className="sm:col-span-2">
+          {linkedCustomerId ? (
+            <div className="flex items-center justify-between rounded-md border border-green-600/40 bg-green-50 px-3 py-2 text-sm dark:bg-green-950/30">
+              <span className="text-green-700 dark:text-green-400">✓ Linked to an existing customer.</span>
+              <button type="button" onClick={unlinkCustomer} className="text-xs text-muted-foreground underline hover:text-foreground">
+                Unlink
+              </button>
+            </div>
+          ) : duplicates.length > 0 ? (
+            <div className="rounded-md border border-brand-gold/50 bg-brand-gold/5 p-3">
+              <p className="text-xs font-medium">
+                Possible existing customer{duplicates.length > 1 ? "s" : ""} — link to avoid a duplicate:
+              </p>
+              <ul className="mt-2 flex flex-col gap-2">
+                {duplicates.slice(0, 4).map((d) => (
+                  <li key={d.customer.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-medium">{d.customer.name}</span>{" "}
+                      <span className="text-xs text-muted-foreground">
+                        {[d.customer.email, d.customer.phone].filter(Boolean).join(" · ")}
+                        {d.reasons.length ? ` — ${d.reasons.join(", ")}` : ""}
+                      </span>
+                    </span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => linkCustomer(d)}>
+                      Use this
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              This info is saved with the quote and creates a customer record. We&apos;ll flag
+              possible duplicates as you type.
+            </p>
+          )}
+        </div>
       </div>
     );
   }
@@ -426,13 +545,14 @@ export function EstimateWizard({
               Start over
             </Button>
             <div className="flex-1" />
-            <Button disabled title="Coming in Phase 2">Save estimate</Button>
-            <Button variant="outline" disabled title="Coming in Phase 2">
-              Generate proposal
+            <Button onClick={handleSave} disabled={saving || !result}>
+              {saving ? "Saving…" : "Save estimate"}
             </Button>
           </div>
+          {saveError && <p className="text-right text-xs text-brand-gold">{saveError}</p>}
           <p className="text-right text-xs text-muted-foreground">
-            Save, branded proposals &amp; GHL handoff arrive in Phase 2.
+            Saving creates the quote &amp; customer record. Generate the branded proposal &amp; GHL
+            handoff on the next screen.
           </p>
         </div>
       ) : (

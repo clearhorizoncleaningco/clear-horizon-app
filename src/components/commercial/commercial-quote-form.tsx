@@ -3,6 +3,7 @@
 import * as React from "react";
 import { computeCommercialQuote, type PricingConfig } from "@/lib/pricing";
 import { commercialQuoteInputSchema } from "@/lib/quotes/schema";
+import { saveCommercialEstimateAction } from "@/app/(app)/commercial/actions";
 import { currency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +32,8 @@ export function CommercialQuoteForm({ config, orgName }: { config: PricingConfig
   const [scopeNotes, setScopeNotes] = React.useState("");
   const [taxable, setTaxable] = React.useState(commercialTaxableDefault);
   const [lineItems, setLineItems] = React.useState<LineItem[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   function updateLineItem(index: number, patch: Partial<LineItem>) {
     setLineItems((prev) => prev.map((li, i) => (i === index ? { ...li, ...patch } : li)));
@@ -64,6 +67,23 @@ export function CommercialQuoteForm({ config, orgName }: { config: PricingConfig
     lineItems,
     taxableOverride: taxable,
   });
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    // On success the action redirects to the new estimate; if it returns, it failed.
+    const res = await saveCommercialEstimateAction({
+      customerName: customerName || null,
+      basePrice,
+      frequencyLabel: frequencyLabel || null,
+      scopeNotes: scopeNotes || null,
+      lineItems,
+      taxableOverride: taxable,
+      customer: { name: customerName || null },
+    });
+    setSaveError(res.error);
+    setSaving(false);
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -163,15 +183,20 @@ export function CommercialQuoteForm({ config, orgName }: { config: PricingConfig
             <SummaryRow label="Total" value={currency(result.total)} strong />
             {frequencyLabel && <p className="pt-2 text-xs text-muted-foreground">{frequencyLabel}</p>}
             <div className="mt-3 flex flex-col gap-2">
-              <Button disabled title="Coming in Phase 2">Save quote</Button>
-              <Button variant="outline" disabled title="Coming in Phase 2">Generate proposal</Button>
+              <Button onClick={handleSave} disabled={!parsed.success || saving}>
+                {saving ? "Saving…" : "Save quote"}
+              </Button>
             </div>
             {!parsed.success && (
               <p className="pt-1 text-xs text-brand-gold">
                 {parsed.error.issues[0]?.message ?? "Check the form before saving."}
               </p>
             )}
-            <p className="pt-1 text-xs text-muted-foreground">Branded proposal &amp; GHL handoff arrive in Phase 2.</p>
+            {saveError && <p className="pt-1 text-xs text-brand-gold">{saveError}</p>}
+            <p className="pt-1 text-xs text-muted-foreground">
+              Saving creates the quote &amp; customer record. Generate the branded proposal and GHL
+              handoff on the next screen.
+            </p>
           </CardContent>
         </Card>
       </div>

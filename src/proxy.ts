@@ -14,7 +14,8 @@ import { publicEnv } from "@/lib/env";
  * re-verify via the DAL (src/lib/auth/dal.ts).
  */
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/signout"];
+// `/approve` is the public, token-gated customer e-approval page (no login).
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/signout", "/approve"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(

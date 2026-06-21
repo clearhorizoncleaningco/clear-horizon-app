@@ -45,6 +45,34 @@ enum AddOnUnit {
   PerUnit // fee multiplied by a quantity (e.g. windows, ceiling fans)
 }
 
+// Phase 2 (BUILD_SPEC §G) — saved-quote + proposal lifecycle.
+
+enum EstimateStatus {
+  Draft // not used yet (wizard saves as Saved); reserved
+  Saved // saved, no proposal generated
+  Proposed // a proposal has been generated
+  Approved // customer e-approved a proposal
+  Declined // customer declined a proposal
+  Expired // all proposals expired with no approval
+}
+
+enum ProposalStatus {
+  Draft
+  Sent // issued; awaiting customer action (live within 30-day window)
+  Approved // customer clicked "I agree" + typed name (e-approval captured)
+  Declined
+  Expired // past the 30-day expiration with no approval
+}
+
+/// One-way GoHighLevel push state (BUILD_SPEC §B — push is behind a feature
+/// flag and STUBBED off in v1; `Stubbed` records the payload that *would* be sent).
+enum GhlPushStatus {
+  NotPushed
+  Stubbed
+  Pushed
+  Failed
+}
+
 // ----------------------------------------------------------------------------
 // Core: organization + users
 // ----------------------------------------------------------------------------
@@ -85,6 +113,11 @@ model Organization {
   propertyTypes        PropertyType[]
   pricingSettings      PricingSetting[]
   marginConfig         MarginConfig?
+
+  // Phase 2
+  customers Customer[]
+  estimates Estimate[]
+  proposals Proposal[]
 }
 
 /// One row per authenticated user, keyed by the Supabase `auth.users.id`.
@@ -378,4 +411,120 @@ model MarginConfig {
   laborBandMax     Decimal      @db.Decimal(6, 4) // seed 0.6000 (60%)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
+}
+
+// ----------------------------------------------------------------------------
+// Phase 2 — customer records, saved estimates, branded proposals (BUILD_SPEC §G)
+// ----------------------------------------------------------------------------
+
+/// A customer/prospect record (BUILD_SPEC §F step 1 + §G). Org-scoped. NOT a CRM
+/// (that's GoHighLevel, §B) — just enough to attach quotes to a person/business,
+/// search them, and detect duplicates. `phoneNormalized` (digits only) backs
+/// duplicate detection alongside a case-folded email.
+model Customer {
+  id              String          @id @default(uuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type            ServiceCategory @default(Residential)
+  name            String
+  email           String?
+  phone           String? // as entered, for display
+  phoneNormalized String? // digits only, for dup detection / search
+  address         String?
+  city            String?
+  zip             String?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  estimates Estimate[]
+
+  @@index([organizationId])
+  @@index([organizationId, email])
+  @@index([organizationId, phoneNormalized])
+}
+
+/// A saved quote. Stores the pricing INPUT and the engine RESULT as immutable
+/// JSON snapshots (so a saved quote never drifts when Admin later edits pricing),
+/// plus denormalized headline columns for fast listing + Phase 3 dashboards.
+/// `resultJson` is the full engine result INCLUDING the admin-only margin — it is
+/// never sent to the client wholesale; pages select customer-safe fields. The
+/// customer-facing Proposal is built from a margin-free projection.
+model Estimate {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String?
+  customer       Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  category       ServiceCategory
+  status         EstimateStatus  @default(Saved)
+
+  // Immutable snapshots of the quote at save time.
+  inputJson  Json
+  resultJson Json
+
+  // Denormalized headline fields (listing + Phase 3 dashboards).
+  summary               String? // e.g. "2,200 sq ft · 3 bd / 2.5 ba · Naples"
+  headlinePrice         Decimal  @db.Decimal(10, 2) // per-visit (recurring) or one-time pre-tax
+  total                 Decimal  @db.Decimal(10, 2) // headline incl. tax
+  frequencyKey          String?
+  frequencyLabel        String?
+  isRecurring           Boolean  @default(false)
+  projectedMonthly      Decimal? @db.Decimal(10, 2)
+  initialDeepCleanPrice Decimal? @db.Decimal(10, 2)
+
+  // Authoring user (no FK — keeps auth decoupled from business data).
+  createdById    String?
+  createdByEmail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposals Proposal[]
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+  @@index([customerId])
+}
+
+/// A branded proposal generated from an Estimate. `documentJson` is the full
+/// CUSTOMER-FACING proposal document (prices, scope checklist, T&C) — margin is
+/// structurally excluded when it's built. Carries the e-approval capture
+/// (BUILD_SPEC §G: "I agree" + typed name + timestamp + IP), a 30-day
+/// expiration, and the one-way GHL push record (stubbed in v1).
+model Proposal {
+  id             String         @id @default(uuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  estimateId     String
+  estimate       Estimate       @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  /// Unguessable public token — backs the approval link and PDF route (no auth).
+  token          String         @unique
+  status         ProposalStatus @default(Sent)
+
+  /// Full rendered, margin-free proposal document. Immutable once issued.
+  documentJson Json
+
+  issuedAt  DateTime @default(now())
+  expiresAt DateTime // §G — 30-day expiration
+
+  // E-approval capture (§G).
+  agreed     Boolean   @default(false)
+  signerName String?
+  signerIp   String?
+  approvedAt DateTime?
+  declinedAt DateTime?
+
+  // One-way GHL push (§B) — stubbed off in v1; we store the payload that *would*
+  // be sent so it can be inspected at the Phase 2 checkpoint.
+  ghlStatus   GhlPushStatus @default(NotPushed)
+  ghlPayload  Json?
+  ghlResponse Json?
+  ghlPushedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([estimateId])
 }

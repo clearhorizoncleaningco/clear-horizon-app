@@ -2,9 +2,12 @@
 
 Internal estimating & proposal tool. **Clean Spaces. Better Places.**
 
-> Status: **Phase 0 (Foundation) complete.** Auth, organization, role model, and all
-> pricing tables (BUILD_SPEC §E) are in place and Admin-editable. The estimate
-> wizard + residential pricing engine are **Phase 1** (not built yet).
+> Status: **Phase 2 (Save & Propose + GHL handoff) complete.** On top of the Phase 1
+> estimator: customer records + search + duplicate detection, saved/retrievable
+> estimates, branded PDF proposals (residential + commercial FL T&C, scope-of-work
+> checklists), lightweight e-approval (I-agree + typed name + timestamp + IP) with a
+> 30-day expiration, and a one-way GoHighLevel push **behind a feature flag, stubbed
+> off** until credentials are added.
 
 ## Stack
 
@@ -67,9 +70,11 @@ npm run db:deploy   # applies the baseline migration (prisma/migrations/0_init)
 npm run db:seed     # create Organization + Admin user + all §E pricing tables
 ```
 
-> A baseline migration (`prisma/migrations/0_init`) ships in the repo, so
-> `db:deploy` works against a fresh Supabase database with no extra steps. In
-> later phases, evolve the schema with `npx prisma migrate dev --name <change>`.
+> Migrations ship in the repo (`prisma/migrations/0_init` + the Phase 2
+> `…_phase2_save_propose_ghl`), so `db:deploy` brings a fresh Supabase database
+> fully up to date with no extra steps. Phase 2 added no new seed data — customer,
+> estimate, and proposal rows are created in-app. Evolve the schema later with
+> `npx prisma migrate dev --name <change>`.
 
 Then sign in at <http://localhost:3000/login> with your seeded admin email + password.
 You should land on a themed dashboard showing your organization, email, and the **Admin** role.
@@ -83,7 +88,9 @@ You should land on a themed dashboard showing your organization, email, and the 
 3. **Settings → Environment Variables** — add the same keys as `.env`:
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
    `DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SITE_URL` (your `https://<app>.vercel.app`),
-   `GHL_PUSH_ENABLED=false`.
+   `GHL_PUSH_ENABLED=false` (leave `GHL_WEBHOOK_URL` empty until you wire GoHighLevel —
+   the push stays stubbed and records the would-send payload). `NEXT_PUBLIC_SITE_URL`
+   must be your real Vercel URL so proposal approval/PDF links are absolute.
 4. Deploy. The build runs `postinstall` (`prisma generate`) then `next build`.
 5. Run `npm run db:deploy` and `npm run db:seed` against the same Supabase project (locally,
    pointing `.env` at production DB, or via a one-off job). Migrations/seed are not run by Vercel.
@@ -103,6 +110,8 @@ You should land on a themed dashboard showing your organization, email, and the 
 | Typecheck | `npm run typecheck` |
 | Lint | `npm run lint` |
 | Unit tests | `npm test` |
+| Verify branded PDF (writes `tmp/sample-proposal.pdf`) | `npm run verify:pdf` |
+| Verify stubbed GHL payload | `npm run verify:ghl` |
 | Generate Prisma client | `npm run db:generate` |
 | Create/apply migration (dev) | `npm run db:migrate` |
 | Apply migrations (prod) | `npm run db:deploy` |

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth/dal";
+import { listEstimates } from "@/lib/estimates/service";
+import { currency0 } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -28,6 +30,7 @@ export default async function DashboardPage() {
 
   const firstName = profile.fullName?.split(" ")[0] ?? "there";
   const isAdmin = profile.role === "Admin";
+  const recent = await listEstimates(profile.organizationId, 5);
 
   return (
     <div className="flex flex-col gap-8">
@@ -60,6 +63,16 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>Customers</CardTitle>
+            <CardDescription>Search records, profiles &amp; quote history.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/customers" className={buttonVariants({ variant: "outline" })}>View customers →</Link>
+          </CardContent>
+        </Card>
+
         {isAdmin ? (
           <Card>
             <CardHeader>
@@ -73,13 +86,13 @@ export default async function DashboardPage() {
         ) : null}
       </div>
 
-      {/* Placeholder metric cards — populated by the estimator in Phase 1. */}
+      {/* Metric cards — KPIs/charts arrive in Phase 3. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Estimates today", hint: "Coming in Phase 1" },
-          { label: "Estimates this month", hint: "Coming in Phase 1" },
-          { label: "Est. monthly revenue", hint: "Coming in Phase 1" },
-          { label: "Avg. ticket", hint: "Coming in Phase 1" },
+          { label: "Estimates today", hint: "KPIs arrive in Phase 3" },
+          { label: "Estimates this month", hint: "KPIs arrive in Phase 3" },
+          { label: "Est. monthly revenue", hint: "KPIs arrive in Phase 3" },
+          { label: "Avg. ticket", hint: "KPIs arrive in Phase 3" },
         ].map((stat) => (
           <Card key={stat.label}>
             <CardHeader className="pb-2">
@@ -93,19 +106,35 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle>No estimates yet</CardTitle>
-          <CardDescription>
-            The foundation is in place: auth, your organization, and all pricing tables are
-            seeded and Admin-editable. The estimate wizard and residential pricing engine arrive
-            in Phase 1.
-          </CardDescription>
+      {/* Recent estimates (Phase 2 — save & retrieve). */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Recent estimates</CardTitle>
+            <CardDescription>Your latest saved quotes.</CardDescription>
+          </div>
+          <Link href="/estimates" className={buttonVariants({ variant: "outline" })}>View all →</Link>
         </CardHeader>
-        <CardContent>
-          <span className="inline-flex items-center rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-            New estimate · available in Phase 1
-          </span>
+        <CardContent className="p-0">
+          {recent.length === 0 ? (
+            <p className="px-6 pb-6 text-sm text-muted-foreground">
+              No estimates yet. Start one above and click Save to see it here.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {recent.map((e) => (
+                <li key={e.id}>
+                  <Link href={`/estimates/${e.id}`} className="flex items-center justify-between gap-4 px-6 py-3 hover:bg-muted/50">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{e.customer?.name ?? "No customer"}</div>
+                      <div className="truncate text-sm text-muted-foreground">{e.summary ?? e.category}</div>
+                    </div>
+                    <span className="font-semibold tabular-nums">{currency0(Number(e.headlinePrice))}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>

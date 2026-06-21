@@ -46,3 +46,36 @@ export const commercialQuoteInputSchema = z.object({
 });
 
 export type CommercialQuoteInputDTO = z.infer<typeof commercialQuoteInputSchema>;
+
+/**
+ * Customer info captured alongside a quote (BUILD_SPEC §F step 1). Lenient on
+ * format (email/phone are not strictly validated) so a rep can save a quote
+ * mid-call with partial info; we only cap lengths. `customerId` is set when the
+ * rep linked an existing customer from the duplicate-detection panel.
+ */
+export const customerInfoSchema = z.object({
+  customerId: z.string().uuid().optional().nullable(),
+  name: z.string().trim().max(200).optional().nullable(),
+  email: z.string().trim().max(200).optional().nullable(),
+  phone: z.string().trim().max(50).optional().nullable(),
+  address: z.string().trim().max(300).optional().nullable(),
+  city: z.string().trim().max(120).optional().nullable(),
+  zip: z.string().trim().max(10).optional().nullable(),
+  notes: z.string().trim().max(5000).optional().nullable(),
+});
+
+export type CustomerInfoDTO = z.infer<typeof customerInfoSchema>;
+
+/** Save payload for a residential estimate: the engine input + customer info. */
+export const saveResidentialEstimateSchema = residentialQuoteInputSchema.extend({
+  customer: customerInfoSchema,
+});
+
+export type SaveResidentialEstimateDTO = z.infer<typeof saveResidentialEstimateSchema>;
+
+/** Save payload for a commercial quote: the manual quote + customer info. */
+export const saveCommercialEstimateSchema = commercialQuoteInputSchema.extend({
+  customer: customerInfoSchema,
+});
+
+export type SaveCommercialEstimateDTO = z.infer<typeof saveCommercialEstimateSchema>;
